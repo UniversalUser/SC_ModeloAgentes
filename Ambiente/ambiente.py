@@ -10,8 +10,8 @@ import matplotlib.pyplot as plt
 from networkx import Graph
 import networkx as nx
 from mesa import Agent, Model
-from mesa.time import RandomActivation, BaseScheduler
-from random import gauss, random, sample, choice, shuffle
+from mesa.time import BaseScheduler, RandomActivation
+from random import gauss, random, sample, choice
 
 
 #Algunas constantes
@@ -33,8 +33,9 @@ class Ciudad(Graph):
         * Mover los individuos a nodos específicos
     La ciudad está representada como un grafo.
     """
-    def __init__(self, model):
+    def __init__(self, model, agent_object):
         super().__init__()
+        self.agent_object = agent_object
         self.model = model
         self.p_matrimonio = 0.8
         self.promedio_hijos = 2
@@ -60,7 +61,7 @@ class Ciudad(Graph):
                 edad = 0
             elif edad > 80:
                 edad = 80
-            individuos.append(Individuo(i,
+            individuos.append(self.agent_object(i,
                                         self.model, 
                                         edad,
                                         sexo)
@@ -146,16 +147,17 @@ class Individuo(Agent):
         self.casa_id = None
         self.nodo_actual = None
         self.R0 = 6
-        self.pasos_para_infectar = 10
+        self.pasos_para_infectar = 15
         self.pasos_para_recuperarse = 8
 
     def step(self):
-        moverse = random() < 0.05
+        moverse = random() < 0.5
         if moverse:
             if self.model.ciudad.nodes[self.nodo_actual]['tipo'] == 'casa':
                 self.model.ciudad.mover_individuo(self, 2000)
             else:
                 self.model.ciudad.mover_individuo(self, self.casa_id)
+        
         self.interactuar()
         
         ## Se revisa la evolución de su salud
@@ -180,18 +182,20 @@ class Individuo(Agent):
                     a.salud = EXPUESTO
 
 class Modelo(Model):
-    def __init__(self, N):
+    def __init__(self, N, city_object, agent_object):
         self.num_ind = N
-        self.schedule = BaseScheduler(self)
+        self.city_object = city_object
+        self.agent_object = agent_object
+        self.schedule = RandomActivation(self)
         self.crearciudad()
     
     def crearciudad(self):
-        self.ciudad = Ciudad(self)
+        self.ciudad = self.city_object(self, self.agent_object)
         for ind in self.ciudad.generarindividuos():
             self.schedule.add(ind)
         
         #Se planta un infectado en la simulación
-        self.schedule.agents[50].salud = INFECTADO
+        self.schedule.agents[0].salud = INFECTADO
         
         #Se crean las casas distribuyendo los individuos
         self.ciudad.crear_hogares()
@@ -200,10 +204,9 @@ class Modelo(Model):
         self.ciudad.add_node(2000, tipo='tienda',
                              habitantes = None, ocupantes = [])
         self.ciudad.conectaracasas(2000)
-        
+    
     def step(self):
         self.schedule.step()
-        agente = self.schedule.agents[0]
 
     
     def conteo(self):
@@ -216,11 +219,11 @@ class Modelo(Model):
 
 
 if __name__=='__main__':
-    m = Modelo(1000)
+    m = Modelo(1000, Ciudad, Individuo)
     nx.draw(m.ciudad)
     historico = []
     for i in range(100):
-        m.step()  
+        m.step()
         conteo = m.conteo()
         historico.append(conteo)
     
