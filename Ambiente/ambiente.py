@@ -11,7 +11,8 @@ from networkx import Graph
 import networkx as nx
 from mesa import Agent, Model
 from mesa.time import BaseScheduler, RandomActivation
-from random import gauss, random, sample, choice
+from mesa.space import MultiGrid
+from random import gauss, random, sample, choice, choices
 
 
 #Algunas constantes
@@ -33,11 +34,12 @@ class Ciudad(Graph):
         * Mover los individuos a nodos específicos
     La ciudad está representada como un grafo.
     """
-    def __init__(self, model, agent_object):
+    def __init__(self, model, agent_object, verbose = False):
         super().__init__()
+        self.verbose = verbose
         self.agent_object = agent_object
         self.model = model
-        self.p_matrimonio = 0.8
+        self.p_matrimonio = 0.7
         self.promedio_hijos = 2
         self.casasids = []
         self.lugaresids = []
@@ -80,7 +82,7 @@ class Ciudad(Graph):
         hombres = [ind for ind in self.agentes_a_asignar if ind.sexo == 'h' and ind.edad>=23]
         mujeres = [ind for ind in self.agentes_a_asignar if ind.sexo == 'm' and ind.edad>=23]
         hijos = [ind for ind in self.agentes_a_asignar if ind.edad < 23]
-        print(f'Cantidad de hombres {len(hombres)}, mujeres {len(mujeres)}, hijos {len(hijos)}')
+        if self.verbose: print(f'Cantidad de hombres {len(hombres)}, mujeres {len(mujeres)}, hijos {len(hijos)}')
         contador_nodos = 0
         while len(hombres)>0 or len(mujeres)>0:
             a_agregar = []
@@ -102,15 +104,12 @@ class Ciudad(Graph):
                 a_agregar.append(hijos.pop())
                 n_hijos-=1
             
-            print(f'En la casa {contador_nodos} hay {len(a_agregar)} personas. Matrimonio : {matrimonio}')
-            for i in a_agregar:
-                i.casa_id = contador_nodos
-                i.nodo_actual = contador_nodos
-            
             ##Se procede a crear el nodo correspondiente
-            self.add_node(contador_nodos, tipo = 'casa',
-                          habitantes = [ind.unique_id for ind in a_agregar],
-                          ocupantes = a_agregar)
+            self.crear_nodo(contador_nodos, tipo = 'casa',
+                            ocupantes = a_agregar)
+            
+            if self.verbose: print(f'En la casa {contador_nodos} hay {len(a_agregar)} personas. Matrimonio : {matrimonio}')
+                
             self.casasids.append(contador_nodos)
             contador_nodos += 1
         
@@ -118,28 +117,106 @@ class Ciudad(Graph):
         while len(hijos) > 0:
             hijo = hijos.pop()
             idcasa = choice(list(self.nodes))
-            print(f'Se agrega un hijo a la casa {idcasa}... ', end='')
+            espacio_casa = self.nodes[idcasa]['espacio']
+            if self.verbose: print(f'Se agrega un hijo a la casa {idcasa}... ', end='')
             self.nodes[idcasa]['habitantes'].append(hijo.unique_id)
-            self.nodes[idcasa]['ocupantes'].append(hijo)
+            #print('Espacios en casa', espacio_casa.empties)
+            espacio_casa.place_agent(hijo, espacio_casa.empties[-1])
             hijo.casa_id = idcasa
             hijo.nodo_actual = idcasa
-            print('Agregado')
+            if self.verbose: print('Agregado')
         
-    def conectaracasas(self, nid):
+    def conectar_a_casas(self, nid):
         for i in list(self.nodes):
             if self.nodes[i]['tipo']=='casa':
-                self.add_edge(nid,i)
-    
-    def mover_individuo(self, ind, nuevonodo_id):
-        self.nodes[ind.nodo_actual]['ocupantes'].remove(ind)
-        self.nodes[nuevonodo_id]['ocupantes'].append(ind)
-        ind.nodo_actual = nuevonodo_id
+                self.conectar_nodos(nid,i)
+                
+    def conectar_nodos(self, nodo1, nodo2):
+        self.add_edge(nodo1, nodo2,
+                      peso = 1)
             
+    def crear_nodo(self,nodo_id, tipo, ocupantes = [], tamano = None):
+        assert tipo in ['casa','tienda']
+        if tipo == 'casa':
+            assert len(ocupantes)>0, 'No hay ocupantes a asignar en la casa'
+            if not tamano:
+                tamano = len(ocupantes)//2+2
+            habitantes = [ind.unique_id for ind in ocupantes]
+        
+        elif tipo == 'tienda':
+            if not tamano:
+                tamano = 20
+            habitantes = []
+        
+        espacio = MultiGrid(width = tamano,
+                            height = tamano,
+                            torus = False)
+        if tipo == 'casa':
+            for i in ocupantes:
+                i.casa_id = nodo_id
+                i.nodo_actual = nodo_id
+                espacio.place_agent(i, espacio.empties[-1])
+        
+        
+        self.add_node(nodo_id, tipo = tipo,
+                      habitantes = habitantes,
+                      espacio = espacio)
+        
+    def mover_en_espacio(self, ind, nueva_pos):
+        espacio = self.nodes[ind.nodo_actual]['espacio']
+        espacio.move_agent(ind, nueva_pos)
+    
+    
+    def mover_en_nodos(self, ind, nuevo_nodo_id):
+        self.nodes[ind.nodo_actual]['espacio'].remove_agent(ind)
+        self.nodes[nuevo_nodo_id]['espacio'].place_agent(ind, 
+                                                        [0,0])
+        ind.nodo_actual = nuevo_nodo_id
+    
+    def contactos(self, ind):
+        x, y = ind.pos
+        return self.nodes[ind.nodo_actual]['espacio'][x][y]
+
+    def siguiente_paso_aleatorio(self, ind):
+        x, y = ind.pos
+        espacio = self.obtener_espacio(ind)
+        paso_x, paso_y = choices([-1,0-1], k=2)
+        nueva_x = x + paso_x
+        nueva_y = y + paso_y
+        nueva_x, nueva_y = self.ajustar_posicion((nueva_x, nueva_y),
+                                                 espacio)
+        espacio.move_agent(ind, (nueva_x, nueva_y))
+        
+    def ajustar_posicion(self, pos, espacio):
+        """
+        Recibe la posicón y la instancia del espacio a donde se desea ajustar
+        """
+        x, y = pos
+        x = max(x, 0)
+        y = max(y, 0)
+        x = min(x, espacio.width-1)
+        y = min(y, espacio.height-1)
+        return(x,y)
+
+    def obtener_espacio(self, nodo_id_o_individuo):
+        """
+        Devuelve el espacio al que pertenece un individuo, o que contiene
+        un nodo
+        """
+        if isinstance(nodo_id_o_individuo, Agent):
+            return self.nodes[nodo_id_o_individuo.nodo_actual]['espacio']
+        elif isinstance(nodo_id_o_individuo, int):
+            return self.nodes[nodo_id_o_individuo]['espacio']
+        else:
+            raise ValueError(f'{nodo_id_o_individuo} no es un tipo válido')
+        
 
 class Individuo(Agent):
     
     def __init__(self, unique_id, model, edad, sexo):
         super().__init__(unique_id, model)
+        self.ciudad = self.model.ciudad
+        self.pos = None
         self.salud = SUCEPTIBLE
         self.sexo = sexo
         self.edad = edad
@@ -151,13 +228,15 @@ class Individuo(Agent):
         self.pasos_para_recuperarse = 8
 
     def step(self):
-        moverse = random() < 0.5
-        if moverse:
-            if self.model.ciudad.nodes[self.nodo_actual]['tipo'] == 'casa':
-                self.model.ciudad.mover_individuo(self, 2000)
+        moverse_entre_nodos = random() < 0.5
+        if moverse_entre_nodos:
+            if self.ciudad.nodes[self.nodo_actual]['tipo'] == 'casa':
+                self.ciudad.mover_en_nodos(self, 2000)
             else:
-                self.model.ciudad.mover_individuo(self, self.casa_id)
-        
+                self.ciudad.mover_en_nodos(self, self.casa_id)
+        else:
+            self.ciudad.siguiente_paso_aleatorio(self)
+            
         self.interactuar()
         
         ## Se revisa la evolución de su salud
@@ -173,7 +252,8 @@ class Individuo(Agent):
     def interactuar(self):
         ## Se selecciona un número de agentes por contagiar de entre los que
         ## se encuentran en su mismo nodo, solamente si está infectado
-        contactos = self.model.ciudad.nodes[self.nodo_actual]['ocupantes']
+        x, y = self.pos
+        contactos = self.model.ciudad.nodes[self.nodo_actual]['espacio'][x][y]
         por_contagiar = self.R0//2
         prob_contagio = .8
         if self.salud == INFECTADO:
@@ -201,9 +281,8 @@ class Modelo(Model):
         self.ciudad.crear_hogares()
         
         #Se agrega una tienda a la ciudad y se conecta con todas las casas
-        self.ciudad.add_node(2000, tipo='tienda',
-                             habitantes = None, ocupantes = [])
-        self.ciudad.conectaracasas(2000)
+        self.ciudad.crear_nodo(2000, tipo='tienda', tamano=2)
+        self.ciudad.conectar_a_casas(2000)
     
     def step(self):
         self.schedule.step()
@@ -220,9 +299,9 @@ class Modelo(Model):
 
 if __name__=='__main__':
     m = Modelo(1000, Ciudad, Individuo)
-    nx.draw(m.ciudad)
+    #nx.draw(m.ciudad)
     historico = []
-    for i in range(100):
+    for i in range(200):
         m.step()
         conteo = m.conteo()
         historico.append(conteo)
