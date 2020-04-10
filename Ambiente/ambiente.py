@@ -5,23 +5,13 @@ Created on Thu Mar 26 10:47:42 2020
 
 @author: carlos
 """
-import numpy as np
-import matplotlib.pyplot as plt
+
 from networkx import Graph
 import networkx as nx
 from mesa import Agent, Model
-from mesa.time import BaseScheduler, RandomActivation
 from mesa.space import MultiGrid
 from random import gauss, random, sample, choice, choices
 
-
-#Algunas constantes
-SUCEPTIBLE = 0
-EXPUESTO = 1
-INFECTADO = 2
-RECUPERADO = 3
-salud_to_str={0:'Suceptible', 1:'Expuesto', 2:'Infectado', 3:'Recuperado'}
-    
 
 class Ciudad(Graph):
     """
@@ -211,109 +201,27 @@ class Ciudad(Graph):
             raise ValueError(f'{nodo_id_o_individuo} no es un tipo válido')
         
 
-class Individuo(Agent):
-    
-    def __init__(self, unique_id, model, edad, sexo):
-        super().__init__(unique_id, model)
-        self.ciudad = self.model.ciudad
-        self.pos = None
-        self.salud = SUCEPTIBLE
-        self.sexo = sexo
-        self.edad = edad
-        self.pasos_infectado=0
-        self.casa_id = None
-        self.nodo_actual = None
-        self.R0 = 6
-        self.pasos_para_infectar = 15
-        self.pasos_para_recuperarse = 8
-
-    def step(self):
-        moverse_entre_nodos = random() < 0.5
-        if moverse_entre_nodos:
-            if self.ciudad.nodes[self.nodo_actual]['tipo'] == 'casa':
-                self.ciudad.mover_en_nodos(self, 2000)
-            else:
-                self.ciudad.mover_en_nodos(self, self.casa_id)
-        else:
-            self.ciudad.siguiente_paso_aleatorio(self)
-            
-        self.interactuar()
-        
-        ## Se revisa la evolución de su salud
-        if self.salud == EXPUESTO:
-            self.pasos_infectado += 1
-            if self.pasos_infectado > self.pasos_para_infectar:
-                self.salud = INFECTADO
-        elif self.salud == INFECTADO:
-            self.pasos_infectado += 1
-            if self.pasos_infectado>self.pasos_para_infectar + self.pasos_para_recuperarse:
-                self.salud = RECUPERADO
-    
-    def interactuar(self):
-        ## Se selecciona un número de agentes por contagiar de entre los que
-        ## se encuentran en su mismo nodo, solamente si está infectado
-        x, y = self.pos
-        contactos = self.model.ciudad.nodes[self.nodo_actual]['espacio'][x][y]
-        por_contagiar = self.R0//2
-        prob_contagio = .8
-        if self.salud == INFECTADO:
-            for a in sample(contactos, min(por_contagiar, len(contactos))):
-                if a.salud == SUCEPTIBLE and random() < prob_contagio:
-                    a.salud = EXPUESTO
-
-class Modelo(Model):
-    def __init__(self, N, city_object, agent_object):
-        self.num_ind = N
-        self.city_object = city_object
-        self.agent_object = agent_object
-        self.schedule = RandomActivation(self)
-        self.crearciudad()
-    
-    def crearciudad(self):
-        self.ciudad = self.city_object(self, self.agent_object)
-        for ind in self.ciudad.generarindividuos():
-            self.schedule.add(ind)
-        
-        #Se planta un infectado en la simulación
-        self.schedule.agents[0].salud = INFECTADO
-        
-        #Se crean las casas distribuyendo los individuos
-        self.ciudad.crear_hogares()
-        
-        #Se agrega una tienda a la ciudad y se conecta con todas las casas
-        self.ciudad.crear_nodo(2000, tipo='tienda', tamano=2)
-        self.ciudad.conectar_a_casas(2000)
-    
-    def step(self):
-        self.schedule.step()
-
-    
-    def conteo(self):
-        #Una función para contar los casos actuales en la ciudad
-        datos = [0,0,0,0]
-        for a in self.schedule.agents:
-            datos[a.salud] += 1
-        return datos
-
 
 
 if __name__=='__main__':
-    m = Modelo(1000, Ciudad, Individuo)
-    #nx.draw(m.ciudad)
-    historico = []
-    for i in range(200):
-        m.step()
-        conteo = m.conteo()
-        historico.append(conteo)
+    from mesa import Agent, Model
     
-    historico = np.array(historico)
-    fig, ax = plt.subplots()
-    ax.plot(historico[:,0], label = 'Suceptibles')
-    ax.plot(historico[:,1], label = 'Expuestos')
-    ax.plot(historico[:,2], label = 'Infectados')
-    ax.plot(historico[:,3], label = 'Recuperados')
-    ax.set_xlabel('Iteraciones')
-    ax.set_ylabel('Población')
-    ax.set_title('Simulación del avance de una infección')
-    ax.legend()
-    plt.show()
+    modelo = Model()
+    modelo.num_ind = 5000
+    class Individuo(Agent):
+        def __init__(self, unique_id, model, edad, sexo):
+            super().__init__(unique_id, model)
+            self.model = model
+            self.edad = edad
+            self.sexo = sexo
+    
+    ciudad = Ciudad(modelo, Individuo)
+    ciudad.generarindividuos()
+    #Se crean las casas distribuyendo los individuos
+    ciudad.crear_hogares()
+    
+    #Se agrega una tienda a la ciudad y se conecta con todas las casas
+    ciudad.crear_nodo('aurrera', tipo='tienda', tamano=2)
+    ciudad.conectar_a_casas('aurrera')
+    
+    nx.draw(ciudad)
