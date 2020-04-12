@@ -10,7 +10,9 @@ from networkx import Graph
 import networkx as nx
 from mesa import Agent, Model
 from mesa.space import MultiGrid
-from random import gauss, random, sample, choice, choices
+from random import gauss, random, sample, choice, choices, randrange
+import numpy as np
+import matplotlib.pyplot as plt
 
 
 class Ciudad(Graph):
@@ -106,15 +108,21 @@ class Ciudad(Graph):
         ##Si sobran hijos, entonces se agregan al azar a todos los nodos
         while len(hijos) > 0:
             hijo = hijos.pop()
-            idcasa = choice(list(self.nodes))
-            espacio_casa = self.nodes[idcasa]['espacio']
-            if self.verbose: print(f'Se agrega un hijo a la casa {idcasa}... ', end='')
-            self.nodes[idcasa]['habitantes'].append(hijo.unique_id)
-            #print('Espacios en casa', espacio_casa.empties)
-            espacio_casa.place_agent(hijo, espacio_casa.empties[-1])
-            hijo.casa_id = idcasa
-            hijo.nodo_actual = idcasa
-            if self.verbose: print('Agregado')
+            while True:
+                idcasa = choice(list(self.nodes))
+                espacio_casa = self.nodes[idcasa]['espacio']
+                if len(espacio_casa.empties) == 0 :
+                    continue
+                
+                if self.verbose: print(f'Se agrega un hijo a la casa {idcasa}... ', end='')
+                self.nodes[idcasa]['habitantes'].append(hijo.unique_id)
+                #print('Espacios en casa', espacio_casa.empties)
+                
+                espacio_casa.place_agent(hijo, espacio_casa.empties[-1])
+                hijo.casa_id = idcasa
+                hijo.nodo_actual = idcasa
+                if self.verbose: print('Agregado')
+                break
         
     def conectar_a_casas(self, nid):
         for i in list(self.nodes):
@@ -130,7 +138,7 @@ class Ciudad(Graph):
         if tipo == 'casa':
             assert len(ocupantes)>0, 'No hay ocupantes a asignar en la casa'
             if not tamano:
-                tamano = len(ocupantes)//2+2
+                tamano = len(ocupantes)//2+1
             habitantes = [ind.unique_id for ind in ocupantes]
         
         elif tipo == 'tienda':
@@ -153,28 +161,52 @@ class Ciudad(Graph):
                       espacio = espacio)
         
     def mover_en_espacio(self, ind, nueva_pos):
+        """
+        Mueve al individuo en el espacio en el que se encuentra a una
+        nueva posición
+        """
         espacio = self.nodes[ind.nodo_actual]['espacio']
         espacio.move_agent(ind, nueva_pos)
     
     
-    def mover_en_nodos(self, ind, nuevo_nodo_id):
+    def mover_en_nodos(self, ind, nuevo_nodo_id, pos = None):
+        """
+        Mueve a un individuo del nodo en el que se encuentra al nuevo_nodo_id.
+        En caso de que no se indique la posición, se colocará al individuo en
+        una casilla aleatoria de todo el espacio.
+        """
         self.nodes[ind.nodo_actual]['espacio'].remove_agent(ind)
-        self.nodes[nuevo_nodo_id]['espacio'].place_agent(ind, 
-                                                        [0,0])
+        nuevo_espacio= self.nodes[nuevo_nodo_id]['espacio']
+        if not pos:
+            pos = (randrange(nuevo_espacio.width),
+                   randrange(nuevo_espacio.height))
+        nuevo_espacio.place_agent(ind, pos)
         ind.nodo_actual = nuevo_nodo_id
     
     def contactos(self, ind):
+        """
+        Devuelve un iterable con todos los individuos que se encuentran en la
+        celda donde está ind, incluyéndolo.
+        """
         x, y = ind.pos
         return self.nodes[ind.nodo_actual]['espacio'][x][y]
 
     def siguiente_paso_aleatorio(self, ind):
+        """
+        Mueve al individuo de forma aleatoria en el espacio en el que 
+        se encuentra
+        """
         x, y = ind.pos
         espacio = self.obtener_espacio(ind)
-        paso_x, paso_y = choices([-1,0-1], k=2)
+        paso_x, paso_y = choices([-2,-1,0,1,2], k=2)
         nueva_x = x + paso_x
         nueva_y = y + paso_y
         nueva_x, nueva_y = self.ajustar_posicion((nueva_x, nueva_y),
                                                  espacio)
+        #if ind.nodo_actual == 'aurrera':
+        #    print(f'Paso x:{paso_x}, y:{paso_y}')
+        #    print(f'Nueva pos: ({nueva_x}, {nueva_y})')
+        #    print(f'de {ind.pos} a ({nueva_x},{nueva_y})')
         espacio.move_agent(ind, (nueva_x, nueva_y))
         
     def ajustar_posicion(self, pos, espacio):
@@ -195,14 +227,36 @@ class Ciudad(Graph):
         """
         if isinstance(nodo_id_o_individuo, Agent):
             return self.nodes[nodo_id_o_individuo.nodo_actual]['espacio']
-        elif isinstance(nodo_id_o_individuo, int):
-            return self.nodes[nodo_id_o_individuo]['espacio']
         else:
-            raise ValueError(f'{nodo_id_o_individuo} no es un tipo válido')
+            return self.nodes[nodo_id_o_individuo]['espacio']
         
 
-
-
+    def ver_espacio(self, nodo_id, figsize = (5,5)):
+        """
+        Se asume que el espacio es un arreglo MultiGrid, donde cada elemento
+        es un conjunto que puede contener más de un individuo
+        """
+        espacio = self.obtener_espacio(nodo_id)
+        ##Primero se cuentan los individuos
+        cuenta = np.zeros((espacio.height, espacio.width),
+                          dtype = np.uint)
+        total = 0
+        for i, x in enumerate(espacio.grid):
+            for j, y in enumerate(x):
+                n_individuos_en_celda = len(y)
+                cuenta[i][j] = n_individuos_en_celda
+                total += n_individuos_en_celda
+        
+        return cuenta, total
+        saturacion = total / espacio.height*espacio.width
+        ##Luego se muestra una representación
+        plt.figure(figsize = figsize)
+        plt.imshow(cuenta, vmin = 0, vmax = saturacion)
+        plt.colorbar()
+        plt.show()
+        print(espacio.grid)
+        print(cuenta)
+        
 if __name__=='__main__':
     from mesa import Agent, Model
     
@@ -224,4 +278,5 @@ if __name__=='__main__':
     ciudad.crear_nodo('aurrera', tipo='tienda', tamano=2)
     ciudad.conectar_a_casas('aurrera')
     
-    nx.draw(ciudad)
+    #nx.draw(ciudad)
+    ciudad.ver_espacio(ciudad.obtener_espacio(1))

@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-Created on Thu Apr  9 19:31:20 2020
-
-@author: carlos
-"""
 from mesa import Agent
 from random import random, sample
 
@@ -44,7 +39,7 @@ class Individuo(Agent):
             habitantes=len(self.ciudad.nodes[self.casa_id]['habitantes'])
             moverse_entre_nodos = random() < (1/habitantes)
           else:
-            moverse_entre_nodos = random() < 0.5
+            moverse_entre_nodos = random() < 0.01
 
           if moverse_entre_nodos:
               if self.ciudad.nodes[self.nodo_actual]['tipo'] == 'casa':
@@ -118,18 +113,20 @@ class Individuo_basico(Agent):
         self.pasos_infectado=0
         self.casa_id = None
         self.nodo_actual = None
-        self.R0 = 6
-        self.pasos_para_infectar = 15
-        self.pasos_para_recuperarse = 8
+        self.R0 = 10
+        self.pasos_para_infectar = 10
+        self.pasos_para_recuperarse = 5
 
     def step(self):
-        moverse_entre_nodos = random() < 0.5
+        moverse_entre_nodos = random() < 0.005
         if moverse_entre_nodos:
             if self.ciudad.nodes[self.nodo_actual]['tipo'] == 'casa':
-                self.ciudad.mover_en_nodos(self, 2000)
+                self.ciudad.mover_en_nodos(self, 'aurrera')
             else:
                 self.ciudad.mover_en_nodos(self, self.casa_id)
         else:
+            #if self.nodo_actual=='aurrera':
+            #    print(f'Ind {self.unique_id} da paso aleatorio')
             self.ciudad.siguiente_paso_aleatorio(self)
             
         self.interactuar()
@@ -149,7 +146,7 @@ class Individuo_basico(Agent):
         ## se encuentran en su mismo nodo, solamente si está infectado
         x, y = self.pos
         contactos = self.model.ciudad.nodes[self.nodo_actual]['espacio'][x][y]
-        por_contagiar = self.R0//2
+        por_contagiar = self.R0
         prob_contagio = .8
         if self.salud == INFECTADO:
             for a in sample(contactos, min(por_contagiar, len(contactos))):
