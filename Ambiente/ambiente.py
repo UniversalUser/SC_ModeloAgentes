@@ -7,13 +7,11 @@ Created on Thu Mar 26 10:47:42 2020
 """
 
 from networkx import Graph
-import networkx as nx
 from mesa import Agent, Model
 from mesa.space import MultiGrid
 from random import gauss, random, sample, choice, choices, randrange
 import numpy as np
 import matplotlib.pyplot as plt
-import itertools
 
 
 class Ciudad(Graph):
@@ -293,6 +291,7 @@ class Ciudad(Graph):
         plt.show()
         
 if __name__=='__main__':
+    import networkx as nx
     modelo = Model()
     modelo.num_ind = 10
     class Individuo(Agent):

@@ -66,6 +66,7 @@ class Modelo(Model):
         #Se crean las casas distribuyendo los individuos
         self.ciudad.crear_hogares()
         
+        
         #Se agrega una tienda a la ciudad y se conecta con todas las casas
         self.ciudad.crear_nodo('ciudad', tipo='ciudad', tamano=75)
         self.ciudad.conectar_a_casas('ciudad')
@@ -117,6 +118,19 @@ def dibujar_agente(agent):
     return portrayal
 
 
+
+n_agentes = 5000
+attrs_individuos = {
+                    'evitar_agentes': False,
+                    'en_cuarentena': False,
+                    'quedate_en_casa': False,
+                    'prob_contagiar': 0.5,
+                    'prob_infectarse': 0.8,
+                    'radio_de_infeccion': 0
+                    }
+
+
+
 malla = CanvasGrid(dibujar_agente, 75, 75 , 600, 600)
 grafico = ChartModule([{'Label': 'Suceptibles',
                         'Color': 'Green'},
@@ -128,8 +142,9 @@ grafico = ChartModule([{'Label': 'Suceptibles',
                         'Color': 'Black'}],
                     data_collector_name = 'datacollector')
 
-argumentos_modelo ={"N":1000, "city_object": Ciudad, 
-                    "agent_object": Individuo_2}
+argumentos_modelo ={"N":n_agentes, "city_object": Ciudad, 
+                    "agent_object": Individuo_2,
+                    "ind_attrs": attrs_individuos}
 
 server = ModularServer(Modelo,
                        [malla, grafico],

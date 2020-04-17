@@ -173,7 +173,7 @@ class Individuo_2(Agent):
         self.n_familiares = 0 #Número de familiares, incluyéndolo
         ##Atributos de comportamiento
         self.evitar_agentes = True
-        self.en_cuarentena = False
+        self.activar_cuarentena = False ###Cambiar por: activar_cuarentena
         self.quedate_en_casa = False
         self.prob_movimiento = 0.005
         ##Atributos de la enfermedad
@@ -197,11 +197,12 @@ class Individuo_2(Agent):
         
 
     def step(self):
-        if self.quedate_en_casa and random()<1/self.n_familiares:
+        if self.nodo_actual == self.casa_id and self.quedate_en_casa and\
+        random()<1/self.n_familiares:
             self.ciudad.siguiente_paso_aleatorio(self,
                                                  self.evitar_agentes)
             
-        elif self.salud == self.model.INFECTADO and self.en_cuarentena:
+        elif self.salud == self.model.INFECTADO and self.activar_cuarentena:
             if self.ciudad.nodes[self.nodo_actual]['tipo']!='casa':
                 self.ciudad.mover_en_nodos(self, self.casa_id, pos = (0,0))
             else:
