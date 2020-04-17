@@ -17,7 +17,7 @@ for p in _paths:
 
 
 from ambiente import Ciudad
-from individuo import Individuo
+from individuo import Individuo_basico, Individuo_2
 
 ##IMPORTANTE: Se requiere el módulo tornado con versión 4.5.3
 from mesa import Model
@@ -25,13 +25,8 @@ from mesa.visualization.modules import CanvasGrid, ChartModule
 from mesa.visualization.ModularVisualization import ModularServer
 from mesa.datacollection import DataCollector
 from mesa.time import RandomActivation
+from random import choices
 
-
-#Algunas constantes
-SUCEPTIBLE = 0
-EXPUESTO = 1
-INFECTADO = 2
-RECUPERADO = 3
 
 class Modelo(Model):
     #Algunas constantes
@@ -40,6 +35,7 @@ class Modelo(Model):
     INFECTADO = 2
     RECUPERADO = 3
     salud_to_str={0:'Suceptible', 1:'Expuesto', 2:'Infectado', 3:'Recuperado'}
+    pp_dia = 4 ## Son los pasos dados por dia simulado
     def __init__(self, N, city_object, agent_object):
         super().__init__()
         self.num_ind = N
@@ -47,7 +43,10 @@ class Modelo(Model):
         self.agent_object = agent_object
         self.schedule = RandomActivation(self)
         self.crearciudad()
-        self.grid = self.ciudad.nodes['aurrera']['espacio']
+        self.n_paso = 0
+        
+        ## Se define el grid que se representará en la 
+        self.grid = self.ciudad.nodes['ciudad']['espacio']
         self.datacollector = DataCollector(
             model_reporters = {'Suceptibles': self.conteo_func(self.SUCEPTIBLE),
                                'Expuestos': self.conteo_func(self.EXPUESTO),
@@ -61,19 +60,22 @@ class Modelo(Model):
             self.schedule.add(ind)
         
         #Se planta un infectado en la simulación
-        self.schedule.agents[0].salud = self.INFECTADO
+        for ind in choices(self.schedule.agents, k = 10):
+            ind.salud = self.EXPUESTO
         
         #Se crean las casas distribuyendo los individuos
         self.ciudad.crear_hogares()
         
         #Se agrega una tienda a la ciudad y se conecta con todas las casas
-        self.ciudad.crear_nodo('aurrera', tipo='tienda', tamano=25)
-        self.ciudad.conectar_a_casas('aurrera')
+        self.ciudad.crear_nodo('ciudad', tipo='ciudad', tamano=75)
+        self.ciudad.conectar_a_casas('ciudad')
     
     def step(self):
+        self.momento = self.n_paso % self.pp_dia #es el momento del dia
         self.conteo()
         self.datacollector.collect(self)
         self.schedule.step()
+        self.n_paso += 1
 
     
     def conteo(self):
@@ -94,15 +96,15 @@ def dibujar_agente(agent):
     radio = 0.8
     layer = 0
 
-    if agent.salud == EXPUESTO:
+    if agent.salud == agent.model.EXPUESTO:
         color = 'orange'
         radio = 0.6
         layer = 1
-    elif agent.salud == INFECTADO:
+    elif agent.salud == agent.model.INFECTADO:
         color = 'red'
         radio = 0.4
         layer = 2
-    elif agent.salud == RECUPERADO:
+    elif agent.salud == agent.model.RECUPERADO:
         color = 'black'
         radio = 0.2
         layer = 3
@@ -115,7 +117,7 @@ def dibujar_agente(agent):
     return portrayal
 
 
-malla = CanvasGrid(dibujar_agente, 25, 25, 800, 800)
+malla = CanvasGrid(dibujar_agente, 75, 75 , 600, 600)
 grafico = ChartModule([{'Label': 'Suceptibles',
                         'Color': 'Green'},
                      {'Label': 'Expuestos',
@@ -126,8 +128,8 @@ grafico = ChartModule([{'Label': 'Suceptibles',
                         'Color': 'Black'}],
                     data_collector_name = 'datacollector')
 
-argumentos_modelo ={"N":20000, "city_object": Ciudad, 
-                    "agent_object": Individuo}
+argumentos_modelo ={"N":1000, "city_object": Ciudad, 
+                    "agent_object": Individuo_2}
 
 server = ModularServer(Modelo,
                        [malla, grafico],
