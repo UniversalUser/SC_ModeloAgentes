@@ -1,4 +1,4 @@
-# SC_ModeloAgentes
+# Modelo Agentes
 
 ## Individuo
 El individuo será una instancia de la clase *Agent* del módulo **Mesa**. Dichos agentes pueden tener uno de los cuatro estados del modelo SEIR (suceptible, expuesto, infectado, recuperado). Cada individuo cuenta con atributos de interés:

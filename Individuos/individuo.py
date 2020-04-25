@@ -100,79 +100,23 @@ class Individuo(Agent):
 ##----------------------------------------------------------------------------
 
 
-class Individuo_basico(Agent):
+class Individuo_base(Agent):
     
-    def __init__(self, unique_id, model, edad, sexo):
-        super().__init__(unique_id, model)
-        self.ciudad = self.model.ciudad
-        self.pos = None
-        self.salud = SUCEPTIBLE
-        self.sexo = sexo
-        self.edad = edad
-        self.pasos_infectado=0
-        self.casa_id = None
-        self.nodo_actual = None
-        self.R0 = 10
-        self.pasos_para_infectar = 40
-        self.pasos_para_recuperarse = 30
-
-    def step(self):
-        moverse_entre_nodos = random() < 0.005
-        if moverse_entre_nodos:
-            if self.ciudad.nodes[self.nodo_actual]['tipo'] == 'casa':
-                self.ciudad.mover_en_nodos(self, 'aurrera')
-            else:
-                self.ciudad.mover_en_nodos(self, self.casa_id)
-        else:
-            #if self.nodo_actual=='aurrera':
-            #    print(f'Ind {self.unique_id} da paso aleatorio')
-            self.ciudad.siguiente_paso_aleatorio(self,
-                                                 evitar_agentes=True)
-            
-        self.interactuar()
-        
-        ## Se revisa la evolución de su salud
-        if self.salud == EXPUESTO:
-            self.pasos_infectado += 1
-            if self.pasos_infectado > self.pasos_para_infectar:
-                self.salud = INFECTADO
-        elif self.salud == INFECTADO:
-            self.pasos_infectado += 1
-            if self.pasos_infectado>self.pasos_para_infectar + self.pasos_para_recuperarse:
-                self.salud = RECUPERADO
-    
-    def interactuar(self):
-        ## Se selecciona un número de agentes por contagiar de entre los que
-        ## se encuentran en su mismo nodo, solamente si está infectado
-
-        if self.salud == INFECTADO:
-            x, y = self.pos
-            contactos = self.ciudad.obtener_contactos(self, r = 1)
-            por_contagiar = self.R0
-            prob_contagio = .8
-            for a in sample(contactos, min(por_contagiar, len(contactos))):
-                if a.salud == SUCEPTIBLE and random() < prob_contagio:
-                    a.salud = EXPUESTO
-
-
-
-#-----------------------------------------------------------------------------
-class Individuo_2(Agent):
-    
-    def __init__(self, unique_id, model, edad, sexo):
+    def __init__(self, unique_id, model):
         super().__init__(unique_id, model)
         #Atributos del individuo
         self.ciudad = model.ciudad
         self.pos = None
         self.salud = model.SUCEPTIBLE
-        self.sexo = sexo
-        self.edad = edad
+        self.sexo = None
+        self.edad = None
         self.trabaja = True
         self.casa_id = None
         self.nodo_actual = None
         self.n_familiares = 0 #Número de familiares, incluyéndolo
         ##Atributos de comportamiento
         self.evitar_agentes = True
+        self.evitar_sintomaticos = False
         self.activar_cuarentena = False ###Cambiar por: activar_cuarentena
         self.quedate_en_casa = False
         self.prob_movimiento = 0.005
@@ -255,3 +199,49 @@ class Individuo_2(Agent):
                 if a.salud == self.model.SUCEPTIBLE and\
                 random() < self.prob_contagiar*a.prob_infectarse:
                     a.salud = self.model.EXPUESTO
+
+    def establecer_atributos(self, attrs):
+        """
+        Asigna los atributos que se encuentran en attrs al agente.
+        Aunque no pertenezca nativamente al agente, este es agregado.
+        """
+        for at in attrs:
+            try:
+                getattr(self, at)
+            except AttributeError:
+                print(f'El atributo {at} no es nativo del agente')
+
+            setattr(self, at, attrs[at])
+
+
+
+#-----------------------------------------------------------------------------
+class Individuo_2(Individuo_base):
+    
+    def __init__(self, unique_id, model):
+        super().__init__(unique_id, model)
+        ##Atributos de comportamiento
+        self.evitar_sintomaticos = False
+        self.distancia_paso = 1
+   
+
+    def step(self):
+        self.ciudad.siguiente_paso_aleatorio(self, 
+                                            evitar_agentes=self.evitar_agentes,
+                                            evitar_sintomaticos=self.evitar_sintomaticos,
+                                            radio = self.distancia_paso)
+
+        self.interactuar()
+        
+        ## Se revisa la evolución de su salud
+        if self.salud == self.model.EXPUESTO:
+            self.pp_infectarse -= 1
+            if self.pp_infectarse == 0:
+                self.salud = self.model.INFECTADO
+        elif self.salud == self.model.INFECTADO:
+            self.pp_recuperarse -= 1
+            if self.pp_recuperarse == 0:
+                self.salud = self.model.RECUPERADO
+
+    def aplicar_medidas(self, medidas = {}):
+        self.establecer_atributos(medidas)

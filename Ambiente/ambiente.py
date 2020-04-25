@@ -9,10 +9,9 @@ Created on Thu Mar 26 10:47:42 2020
 from networkx import Graph
 from mesa import Agent, Model
 from mesa.space import MultiGrid
-from random import gauss, random, sample, choice, choices, randrange
+from random import gauss, random, sample, choice, choices, randrange, shuffle
 import numpy as np
 import matplotlib.pyplot as plt
-
 
 class Ciudad(Graph):
     """
@@ -31,37 +30,40 @@ class Ciudad(Graph):
         self.agent_object = agent_object
         self.model = model
         self.p_matrimonio = 0.7
+        self.p_asintomatico = 0.5
         self.promedio_hijos = 2
+        self.porcentaje_hombres = 0.49
         self.casasids = []
         self.lugaresids = []
         self.agentes_a_asignar = []
     
-    def generarindividuos(self, attrs={}):
+    def generar_individuos(self, attrs={}):
         """
         Considerando el porcentaje de hombres y mujeres en la población, y la
         distribución de las edades en la población (considerando una distribución
         normal) se procede a generar la población.
         """
-        porcentaje_hombres = 0.49
+        
         for i in range(self.model.num_ind):
-            if random() <= porcentaje_hombres:
-                sexo = 'h'
-            else:
-                sexo = 'm'
+            agente = self.agent_object(i,
+                                        self.model)
+
+            attrs['sexo'] = 'h' if random()<=self.porcentaje_hombres else 'm'
+
             edad = gauss(25,20)
             if edad < 0:
-                edad = 0
-            elif edad > 80:
-                edad = 80
-            
-            agente = self.agent_object(i,
-                                        self.model, 
-                                        edad,
-                                        sexo)
-            
+                attrs['edad'] = 0
+            elif edad > 90:
+                attrs['edad'] = 90
+
+            if random()<self.p_asintomatico:
+                attrs['asintomatico'] = True
+            else: 
+                attrs['asintomatico'] = False
             ##Se establecen los atributos en attrs
-            for at in attrs:
-                setattr(agente, at, attrs[at])
+            agente.establecer_atributos(attrs)
+            #for at in attrs:
+            #    setattr(agente, at, attrs[at])
             
             self.agentes_a_asignar.append(agente)
         return self.agentes_a_asignar
@@ -136,7 +138,8 @@ class Ciudad(Graph):
         self.add_edge(nodo1, nodo2,
                       peso = 1)
             
-    def crear_nodo(self,nodo_id, tipo, ocupantes = [], tamano = None):
+    def crear_nodo(self,nodo_id, tipo, ocupantes = [], tamano = None,
+                   ind_pos_def = None):
         assert tipo in ['casa','tienda', 'ciudad']
         if tipo == 'casa':
             assert len(ocupantes)>0, 'No hay ocupantes a asignar en la casa'
@@ -152,12 +155,17 @@ class Ciudad(Graph):
         espacio = MultiGrid(width = tamano,
                             height = tamano,
                             torus = False)
-        if tipo == 'casa':
-            for i in ocupantes:
-                i.casa_id = nodo_id
-                i.nodo_actual = nodo_id
-                i.n_familiares = len(habitantes)
-                espacio.place_agent(i, (0,0))
+        if not ind_pos_def: 
+            disponibles = espacio.empties[::]
+            shuffle(disponibles)
+            
+        
+        for i in ocupantes:
+            i.casa_id = nodo_id if tipo=='casa' else None
+            i.n_familiares = len(habitantes) if tipo=='casa' else 0
+            i.nodo_actual = nodo_id
+            i_pos = disponibles.pop() if not ind_pos_def else [0,0]
+            espacio.place_agent(i, i_pos)
         
         
         self.add_node(nodo_id, tipo = tipo,
@@ -216,7 +224,8 @@ class Ciudad(Graph):
         return self.nodes[ind.casa_id]['habitantes']
     
 
-    def siguiente_paso_aleatorio(self, ind, evitar_agentes = False):
+    def siguiente_paso_aleatorio(self, ind, evitar_agentes = False,
+                                    evitar_sintomaticos = False, radio = 1):
         """
         Mueve al individuo de forma aleatoria en el espacio en el que 
         se encuentra. En caso de que evitar_agentes == True, se selecciona
@@ -225,24 +234,45 @@ class Ciudad(Graph):
         x, y = ind.pos
         espacio = self.obtener_espacio(ind)
         
-        if not evitar_agentes:
-            paso_x, paso_y = choices([-1,0,1], k=2)
+        if not evitar_agentes and not evitar_sintomaticos:
+            paso_x, paso_y = choices(list(range(-radio,radio+1)), k=2)
             nueva_x = x + paso_x
             nueva_y = y + paso_y
             nueva_x, nueva_y = self.ajustar_posicion((nueva_x, nueva_y),
                                                      espacio)
+
         else:
             vecindario = espacio.get_neighborhood(pos = (x,y),
                                                   moore = True,
-                                                  include_center = False,
-                                                  radius = 1)
-            disponibles = [pos for pos in vecindario\
-                           if espacio.is_cell_empty(pos)]
-            if len(disponibles)==0:
-                nueva_x, nueva_y = x, y
-            else:
-                nueva_x, nueva_y = choice(disponibles)
-        
+                                                  include_center = True,
+                                                  radius = radio)
+            shuffle(vecindario)
+            nueva_x, nueva_y = x, y
+
+            #if evitar_sintomaticos:
+            #    disponibles = [pos for pos in vecindario\
+            #                   if espacio.is_cell_empty(pos)]
+            #    for pos in disponibles:
+            #        for i in espacio.iter_cell_list_contents(pos):
+            #            if i.asintomatico == True or i is self:
+            #                continue
+            #        nueva_x, nueva_y = pos
+            #        break
+
+            if evitar_agentes:
+                disponibles = [pos for pos in vecindario\
+                               if espacio.is_cell_empty(pos)]
+                if len(disponibles)!=0:
+                    nueva_x, nueva_y = disponibles.pop()
+
+            elif evitar_sintomaticos:
+                for pos in vecindario:
+                    for i in espacio.iter_cell_list_contents(pos):
+                        if i.asintomatico == True or i is self:
+                            continue
+                    nueva_x, nueva_y = pos
+                    break
+
         espacio.move_agent(ind, (nueva_x, nueva_y))
         
     def ajustar_posicion(self, pos, espacio):
