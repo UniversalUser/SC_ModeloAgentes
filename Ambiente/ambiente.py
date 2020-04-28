@@ -254,11 +254,14 @@ class Ciudad(Graph):
 
             elif evitar_sintomaticos:
                 for pos in vecindario:
+                    existe_infectado = False
                     for i in espacio.iter_cell_list_contents(pos):
-                        if i is self or (i.asintomatico == True and i.salud == self.model.INFECTADO):
-                            continue
-                    nueva_x, nueva_y = pos
-                    break
+                        if i.salud == self.model.INFECTADO and i.asintomatico == False:
+                            existe_infectado = True
+                            break
+                    if not existe_infectado:
+                        nueva_x, nueva_y = pos
+                        break
 
         espacio.move_agent(ind, (nueva_x, nueva_y))
         
