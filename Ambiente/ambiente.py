@@ -45,8 +45,7 @@ class Ciudad(Graph):
         """
         
         for i in range(self.model.num_ind):
-            agente = self.agent_object(i,
-                                        self.model)
+            agente = self.agent_object(i, self.model)
 
             attrs['sexo'] = 'h' if random()<=self.porcentaje_hombres else 'm'
 
@@ -60,10 +59,8 @@ class Ciudad(Graph):
                 attrs['asintomatico'] = True
             else: 
                 attrs['asintomatico'] = False
-            ##Se establecen los atributos en attrs
+           
             agente.establecer_atributos(attrs)
-            #for at in attrs:
-            #    setattr(agente, at, attrs[at])
             
             self.agentes_a_asignar.append(agente)
         return self.agentes_a_asignar
@@ -249,16 +246,6 @@ class Ciudad(Graph):
             shuffle(vecindario)
             nueva_x, nueva_y = x, y
 
-            #if evitar_sintomaticos:
-            #    disponibles = [pos for pos in vecindario\
-            #                   if espacio.is_cell_empty(pos)]
-            #    for pos in disponibles:
-            #        for i in espacio.iter_cell_list_contents(pos):
-            #            if i.asintomatico == True or i is self:
-            #                continue
-            #        nueva_x, nueva_y = pos
-            #        break
-
             if evitar_agentes:
                 disponibles = [pos for pos in vecindario\
                                if espacio.is_cell_empty(pos)]
@@ -268,7 +255,7 @@ class Ciudad(Graph):
             elif evitar_sintomaticos:
                 for pos in vecindario:
                     for i in espacio.iter_cell_list_contents(pos):
-                        if i.asintomatico == True or i is self:
+                        if i is self or (i.asintomatico == True and i.salud == self.model.INFECTADO):
                             continue
                     nueva_x, nueva_y = pos
                     break
